@@ -1,3 +1,4 @@
+import re
 import tkinter as tk
 from tkinter import ttk,filedialog
 import subprocess
@@ -7,7 +8,13 @@ import os
 import customtkinter
 import tkinterDnD
 from PIL import Image
+import queue
+from functools import partial
 
+
+command = "" 
+render_thread = None
+progressbar = None
 
 katana_bin = "katanaBin.exe"
 render_process = None
@@ -25,7 +32,7 @@ root.geometry(f"{width}x{height}")
 root.title("Katana Batch Renderer")
 root.grid_rowconfigure(0, weight=1)
 
-
+render_output_queue = queue.Queue()
 
 root.grid_columnconfigure(0, weight=1)
 root.grid_columnconfigure(1, weight=100)
@@ -36,10 +43,15 @@ root.resizable(False, False)
 
 def render_frames():
     global render_process
+    global progressbar  # Make sure progressbar is a global variable
+    global render_thread  # Declare render_thread as a global variable
+    global command  # Use the global command variable
+    
     katana_file = entry_katana_file.get()
     frame_range = entry_frame_range.get()
     render_node = entry_render_node.get()
-
+    # Reset progress bar
+    progressbar.set(0)
     if not katana_file or not frame_range:
         #result_label.configure(text="Please provide Katana File and Frame Range.")
         result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
@@ -61,41 +73,154 @@ def render_frames():
 
     try:
         # Redirect the output to a pipe to capture it
-        render_process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
-        stop_render_button.configure(state=tk.NORMAL)  # Enable the stop render button
+        if render_process is None or render_process.poll() is not None:
+            render_process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+            stop_render_button.configure(state=tk.NORMAL)
+            threading.Thread(target=monitor_render_output, args=(render_process.stdout,)).start()
+            threading.Thread(target=update_progress_from_process, args=(render_process, progressbar)).start()
 
-        # Start a thread to read and display the output
-        threading.Thread(target=monitor_render_output, args=(render_process.stdout,)).start()
+            stop_render_button.configure(state=tk.NORMAL)
+            render_button.configure(state=tk.DISABLED)
+       
+    
 
     except Exception as e:
         #result_label.configure(text=f"Error: {e}")
+        # print(f"Error starting rendering process: {e}")
         result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
         result_label.delete(1.0, tk.END)  # Clear existing text
         result_label.insert(tk.END, f"Error: {e}")
         result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
+    finally:
+        stop_render_event.clear()
         
-def monitor_render_output(output_stream):
+def update_progress_from_process(process, progressbar):
     try:
-        while True:
-            line = output_stream.readline()
-            if not line:
-                break
-            output_text.insert(tk.END, line)
-            output_text.yview(tk.END)  # Auto-scroll to the end
+        for line in iter(process.stdout.readline, b''):
+            update_progress(line, progressbar)
     except Exception as e:
         print(f"Error reading output: {e}")
-
     finally:
-        output_stream.close()
-        # Signal that the rendering process has finished
+        process.stdout.close()
+def render_frames_thread():
+    global render_process
+    global progressbar
+    global stop_render_event
+
+    # ... (Your existing rendering code)
+
+    try:
+        render_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,text=True, bufsize=1, universal_newlines=True)
+
+        for line in iter(render_process.stdout.readline, b''):
+            render_output_queue.put(line)
+            root.after(10, update_progress, line, progressbar)
+
+        render_thread = threading.Thread(target=monitor_render_output, args=(render_output_queue, progressbar, render_process.stdout))
+        render_thread.start()
+
+        # ... (Your existing code)
+
+    except Exception as e:
+        # print(f"Error starting rendering process: {e}")
+        result_label.configure(state=tk.NORMAL)
+        result_label.delete(1.0, tk.END)
+        result_label.insert(tk.END, f"Error: {e}")
+        result_label.configure(state=tk.DISABLED)
+    finally:
         stop_render_event.set()
-        stop_render_button.configure(state=tk.DISABLED)  # Disable the stop render button
+        stop_render_button.configure(state=tk.DISABLED)
+
+def monitor_render_output(output_stream):
+    try:
+        for line in iter(partial(output_stream.readline, 4096), ''):
+            output_text.insert(tk.END, line)
+            output_text.yview(tk.END) 
+            update_progress(line, progressbar)
+            
+
+
+    except Exception as e:
+        print(f"Error reading output: {e}")
+    finally:
+        if not output_stream.closed:
+            output_stream.close()
+
+        stop_render_event.set()
+        render_button.configure(state=tk.NORMAL)
+        stop_render_button.configure(state=tk.DISABLED)
+        result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
+        result_label.delete(1.0, tk.END) 
+        result_label.insert(tk.END, "Rendering Done!")
+        result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
+
+def update_ui(output_queue):
+    try:
+        while True:
+            message = output_queue.get()
+            if not message:
+                break
+            output_text.insert(tk.END, message + "\n")
+            output_text.yview(tk.END)  # Auto-scroll to the end
+
+    except Exception as e:
+        print(f"Error updating UI: {e}")
+def update_output_text(line):
+    output_text.configure(state=tk.NORMAL)
+    output_text.insert(tk.END, line)
+    output_text.see(tk.END)
+    output_text.configure(state=tk.DISABLED)
+    output_text.update_idletasks()
+# Add this function to update the progress bar based on the output
+# Add this function to update the progress bar based on the output
+def update_progress(output_line, progressbar):
+    # Search for the percentage in the output line
+    if "done -" in output_line and "%" in output_line:
+        try:
+            # Extract the percentage value
+            percentage = int(output_line.split("%")[0].split()[-1])
+            # Convert the percentage to a value between 0 and 1
+            progress = percentage / 100.0
+            # Update the progress bar
+            progressbar.set(progress)
+            # print(f"Updated progress to {progress}")
+        except ValueError:
+            pass  # Handle the case where the conversion to int fail
+
+def _update_progress(output_line, progressbar):
+    # Search for the percentage in the output line
+    if "done -" in output_line and "%" in output_line:
+        try:
+            # Extract the percentage value
+            percentage = int(output_line.split("%")[0].split()[-1])
+            # Convert the percentage to a value between 0 and 1
+            progress = percentage / 100.0
+            # Update the progress bar
+            progressbar.set(progress)
+            # print(f"Updated progress to {progress}")
+        except ValueError:
+            pass  # Handle the case where the conversion to int fails
+       
+def extract_progress_from_line(line):
+    # Add your logic to extract the progress value from the line
+    # For example, you might use regular expressions to find the progress value
+    # Customize this based on the format of your render output
+    progress_match = re.search(r"Progress: (\d+)%", line)
+    if progress_match:
+        return int(progress_match.group(1)) / 100.0
+    else:
+        return 0.0
+    
 
 # Bind the cleanup function to the UI close event
-
-
 def cleanup_on_close():
     global render_process
+    
+    if render_thread and render_thread.is_alive():
+        render_thread.join(timeout=0)
+        stop_render()
+    elif render_process and render_process.poll() is None:
+        stop_render()
     if render_process:
         try:
             parent = psutil.Process(render_process.pid)
@@ -116,10 +241,11 @@ def cleanup_on_close():
             result_label.delete(1.0, tk.END)  # Clear existing text
             result_label.insert(tk.END, f"Error stopping render: {e}")
             result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
-    
+    # root.protocol("WM_DELETE_WINDOW", cleanup_on_close)
     root.destroy()
     
 def display_output(output_stream):
+    print("Displaying output")
     for line in output_stream:
         # Update the CTkText widget with the command output
         root.after(10, output_text.insert, tk.END, line)
@@ -128,25 +254,36 @@ def display_output(output_stream):
     
 def stop_render():
     global render_process
+    global stop_render_event
     if render_process:
         try:
-            parent = psutil.Process(render_process.pid)
-            children = parent.children(recursive=True)
-            for child in children:
-                child.terminate()
+            if psutil.pid_exists(render_process.pid):
+                parent = psutil.Process(render_process.pid)
+                children = parent.children(recursive=True)
+                for child in children:
+                    child.terminate()
 
-            parent.terminate()
-            parent.wait()  # Wait for the parent process to finish
-            result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
-            result_label.delete(1.0, tk.END)  # Clear existing text
-            result_label.insert(tk.END, "Batch rendering stopped.")
-            result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
+                parent.terminate()
+                parent.wait()
+                result_label.configure(state=tk.NORMAL)
+                result_label.delete(1.0, tk.END)
+                result_label.insert(tk.END, "Batch rendering stopped.")
+                result_label.configure(state=tk.DISABLED)
+            else:
+                result_label.configure(state=tk.NORMAL)
+                result_label.delete(1.0, tk.END)
+                result_label.insert(tk.END, "Batch rendering process not found.")
+                result_label.configure(state=tk.DISABLED)
+
         except Exception as e:
-            result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
-            result_label.delete(1.0, tk.END)  # Clear existing text
+            result_label.configure(state=tk.NORMAL)
+            result_label.delete(1.0, tk.END)
             result_label.insert(tk.END, f"Error stopping render: {e}")
-            result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
-
+            result_label.configure(state=tk.DISABLED)
+        finally:
+            render_button.configure(state=tk.NORMAL)
+            stop_render_button.configure(state=tk.DISABLED)
+            stop_render_event.set()
 
 def monitor_render_process(process):
     global stop_render_event
@@ -482,7 +619,9 @@ output_text.grid(row=9, column=0, columnspan=5, padx=40, pady=40, sticky="nsew")
 output_text.configure(state=tk.NORMAL)  # Allow modifications
 root.protocol("WM_DELETE_WINDOW", cleanup_on_close)
 
-
+progressbar = customtkinter.CTkProgressBar(secondbar_frame, orientation="horizontal")
+progressbar.grid(row=10, column=0, padx=(20, 10), pady=(10, 10), sticky="ew")
+progressbar.set(0)
 # Footer label
 footer_label = customtkinter.CTkLabel(footer_frame, height=10,  text= "This Script was written by Oluwajomiloju Osho with the help of ChatGPT", font=('Arial', 8),)
 
@@ -497,4 +636,5 @@ gsv_frame.grid_columnconfigure(1, weight=3)
 gsv_frame.grid_columnconfigure(2, weight=1)
 gsv_frame.grid_rowconfigure(0, weight=1)  # Adjust the weight
 
+root.protocol("WM_DELETE_WINDOW", cleanup_on_close)
 root.mainloop()
