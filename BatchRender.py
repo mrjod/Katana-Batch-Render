@@ -38,20 +38,36 @@ root.grid_columnconfigure(0, weight=1)
 root.grid_columnconfigure(1, weight=100)
 
 
-root.resizable(False, False)
+root.resizable(True, True)
 
+# Global variables to track rendered frames
+frame_range_list = []
+completed_frames = set()
+
+def parse_frame_range(frame_range_str):
+    frames = set()
+    for part in frame_range_str.split(','):
+        if '-' in part:
+            start, end = map(int, part.split('-'))
+            frames.update(range(start, end + 1))
+        else:
+            frames.add(int(part))
+    return frames
 
 def render_frames():
     global render_process
     global progressbar  # Make sure progressbar is a global variable
     global render_thread  # Declare render_thread as a global variable
     global command  # Use the global command variable
+    global frame_range_list
+    global completed_frames
     
     katana_file = entry_katana_file.get()
     frame_range = entry_frame_range.get()
     render_node = entry_render_node.get()
     # Reset progress bar
     progressbar.set(0)
+    completed_frames.clear()
     if not katana_file or not frame_range:
         #result_label.configure(text="Please provide Katana File and Frame Range.")
         result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
@@ -59,7 +75,8 @@ def render_frames():
         result_label.insert(tk.END, "Please provide Katana File and Frame Range.")
         result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
         return
-
+    
+    frame_range_list = parse_frame_range(frame_range)
     command = f'"{katana_bin}" --batch --katana-file="{katana_file}" -t {frame_range}'
 
     if render_node:
@@ -70,18 +87,20 @@ def render_frames():
         name, value = gsv[0].get(), gsv[1].get()
         if name and value:
             command += f' --var {name}={value}'
+    
+    
 
     try:
+        render_process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True) # Update this line
         # Redirect the output to a pipe to capture it
-        if render_process is None or render_process.poll() is not None:
-            render_process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+        if render_process:
             stop_render_button.configure(state=tk.NORMAL)
-            threading.Thread(target=monitor_render_output, args=(render_process.stdout,)).start()
-            threading.Thread(target=update_progress_from_process, args=(render_process, progressbar)).start()
-
-            stop_render_button.configure(state=tk.NORMAL)
+            render_thread = threading.Thread(target=monitor_render_output, args=(render_process,))
+            render_thread.start()
+            # threading.Thread(target=update_progress_from_process, args=(render_process, progressbar)).start()
             render_button.configure(state=tk.DISABLED)
-       
+        else:
+            raise RuntimeError("Failed to start render process.")
     
 
     except Exception as e:
@@ -131,29 +150,100 @@ def render_frames_thread():
         stop_render_event.set()
         stop_render_button.configure(state=tk.DISABLED)
 
-def monitor_render_output(output_stream):
-    try:
-        for line in iter(partial(output_stream.readline, 4096), ''):
-            output_text.insert(tk.END, line)
-            output_text.yview(tk.END) 
-            update_progress(line, progressbar)
+def monitor_render_output(process):
+# def monitor_render_output(output_stream):
+    global render_process
+    global progressbar
+    global stop_render_event
+    global frame_range_list
+    def read_output(pipe, output_func):
+        for line in iter(pipe.readline, ''):
+            output_func(line)
+    stdout_thread = threading.Thread(target=read_output, args=(process.stdout, handle_stdout))
+    stderr_thread = threading.Thread(target=read_output, args=(process.stderr, handle_stderr))
+    stdout_thread.start()
+    stderr_thread.start()
+    stdout_thread.join()
+    stderr_thread.join()
+    
+    process.stdout.close()
+    process.stderr.close()
+    
+    stop_render_event.set()
+    render_button.configure(state=tk.NORMAL)
+    stop_render_button.configure(state=tk.DISABLED)
+    result_label.configure(state=tk.NORMAL)
+    result_label.delete(1.0, tk.END)
+    result_label.insert(tk.END, "Rendering Done!")
+    result_label.configure(state=tk.DISABLED)
+            
+    # try:
+    #     for line in iter(partial(output_stream.readline, 4096), ''):
+    #         # print(line.strip())  # Debug: Print each line of output
+    #         output_text.insert(tk.END, line)
+    #         output_text.yview(tk.END) 
+    #         update_progress(line, progressbar)
+    #         check_frame_completion(line)
+        
+        # if completed_frames >= frame_range_list:
+        #     stop_render_event.set()
+            
+        #     # Terminate the render process if it's still running
+        #     if render_process and render_process.poll() is None:
+        #         render_process.terminate()
+        #         render_process.wait()  # Wait for the process to finish
+        #         render_button.configure(state=tk.NORMAL)
+        #         stop_render_button.configure(state=tk.DISABLED)
+        #         result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
+        #         result_label.delete(1.0, tk.END) 
+        #         result_label.insert(tk.END, "Rendering Done!")
+        #         result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
             
 
 
-    except Exception as e:
-        print(f"Error reading output: {e}")
-    finally:
-        if not output_stream.closed:
-            output_stream.close()
+    # except Exception as e:
+    #     print(f"Error reading output: {e}")
+    # finally:
+    #     if not output_stream.closed:
+    #         output_stream.close()
+        
+    #     # if completed_frames >= frame_range_list:
+    #     stop_render_event.set()
+    #     render_button.configure(state=tk.NORMAL)
+    #     stop_render_button.configure(state=tk.DISABLED)
+    #     result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
+    #     result_label.delete(1.0, tk.END) 
+    #     result_label.insert(tk.END, "Rendering Done!")
+    #     result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
 
-        stop_render_event.set()
-        render_button.configure(state=tk.NORMAL)
-        stop_render_button.configure(state=tk.DISABLED)
+def handle_stdout(line):
+    output_text.insert(tk.END, line)
+    output_text.yview(tk.END)
+    update_progress(line, progressbar)
+    check_frame_completion(line)
+
+def handle_stderr(line):
+    output_text.insert(tk.END, line)
+    output_text.yview(tk.END)
+                
+def check_frame_completion(output_line):
+    match = re.search(r"Frame (\d+) completed", output_line)
+    if match:
+        frame = int(match.group(1))
+        completed_frames.add(frame)
         result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
         result_label.delete(1.0, tk.END) 
-        result_label.insert(tk.END, "Rendering Done!")
+        result_label.insert(tk.END, f"Frame {frame} completed")
         result_label.configure(state=tk.DISABLED)  # Disable the CTkTextbox
-
+        update_result_label()
+def update_result_label():
+    completed_frames_str = ", ".join(map(str, sorted(completed_frames)))
+    #result_label.configure(text=f"Completed frames: {completed_frames_str}")
+    result_label.configure(state=tk.NORMAL)  # Enable the CTkTextbox for editing
+    result_label.delete(1.0, tk.END) 
+    result_label.insert(tk.END, f"Frame {completed_frames_str} completed")
+    result_label.configure(state=tk.DISABLED)
+        
 def update_ui(output_queue):
     try:
         while True:
@@ -286,7 +376,37 @@ def stop_render():
             stop_render_event.set()
 
 def monitor_render_process(process):
+    global render_process
+    global progressbar
     global stop_render_event
+    
+    
+    # while True:
+    #     if stop_render_event.is_set():
+    #         break
+
+    #     line = process.stdout.readline()
+    #     if line:
+    #         render_output_queue.put(line)
+    #         root.after(100, update_output_text, line)
+    #         check_frame_completion(line)
+    #     else:
+    #         break
+    # # After processing all output, check if all frames are completed
+    # if completed_frames >= frame_range_list:
+    #     stop_render_event.set()  # Signal to stop rendering
+    #     render_button.configure(state=tk.NORMAL)  # Enable render button
+    #     stop_render_button.configure(state=tk.DISABLED)  # Disable stop render button
+    #     result_label.configure(state=tk.NORMAL)  # Enable result label
+    #     result_label.delete(1.0, tk.END)  # Clear existing text
+    #     result_label.insert(tk.END, "Rendering Done!")  # Update rendering status
+    #     result_label.configure(state=tk.DISABLED)  # Disable result label
+
+    # # After checking completion, close the output stream
+    # process.stdout.close()
+    
+    
+     #global stop_render_event
     process.communicate()  # Wait for the process to finish
     stop_render_event.set()  # Signal that the rendering process has finished
     stop_render_button.configure(state=tk.DISABLED)  # Disable the stop render button
@@ -462,7 +582,7 @@ def change_appearance_mode_event(new_appearance_mode: str):
 # root.resizable(False, False)
 
 # Set custom icon
-icon_path = "jomilojuArnold222.ico"  # Replace with the path to your .ico file
+icon_path = "WindowsIcon.ico"  # Replace with the path to your .ico file
 root.iconbitmap(icon_path)
 
 # # load and create background image
@@ -478,9 +598,9 @@ sidebar_frame.grid(row=0, column=0, rowspan=10, sticky="NWSE")
 sidebar_frame.grid_rowconfigure(0, weight=1)
 sidebar_frame.grid_columnconfigure(1, weight=1)
 
-my_image = customtkinter.CTkImage(light_image=Image.open("jomilojuArnold222.jpg"),
-                                  dark_image=Image.open("jomilojuArnold222.jpg"),
-                                  size=(100, 60))
+my_image = customtkinter.CTkImage(light_image=Image.open("WindowsIcon.ico"),
+                                  dark_image=Image.open("WindowsIcon.ico"),
+                                  size=(60, 60))
 
 image_label = customtkinter.CTkLabel(sidebar_frame, image=my_image, text="",)  # display image with a CTkLabel
 image_label.grid(row=0, column=0, pady= 30,padx= 10, sticky="NW")
