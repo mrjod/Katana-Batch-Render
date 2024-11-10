@@ -692,10 +692,10 @@ def load_preset():
 
 def add_gsv_entry(name=None, value=None):
     # Create or use an existing scrollable frame
-    gsv_name_entry = customtkinter.CTkEntry(gsv_frame, height=30, width=100,fg_color="#1d1e1e",border_color="#1d1e1e", placeholder_text="Var")
+    gsv_name_entry = customtkinter.CTkEntry(gsv_frame, height=30, width=100,fg_color=forgro_color,border_color=forgro_color, placeholder_text="Var")
     gsv_name_entry.grid(row=len(gsv_entries) + 1, column=0, padx=10, pady=(5, 5), sticky="nsew")
 
-    gsv_value_entry = customtkinter.CTkEntry(gsv_frame, height=20, width=100,fg_color="#1d1e1e",border_color="#1d1e1e", placeholder_text="Value")
+    gsv_value_entry = customtkinter.CTkEntry(gsv_frame, height=20, width=100,fg_color=forgro_color,border_color=forgro_color, placeholder_text="Value")
     gsv_value_entry.grid(row=len(gsv_entries) + 1, column=1, padx=10, pady=(5, 5), sticky="nsew")
 
     remove_button = customtkinter.CTkButton(gsv_frame, text="Remove", width=100, height=24, command=lambda: remove_gsv_entry(gsv_name_entry, gsv_value_entry, remove_button))
@@ -759,32 +759,40 @@ def change_appearance_mode_event(new_appearance_mode: str):
     global forgro_color
     customtkinter.set_appearance_mode(new_appearance_mode)
     if new_appearance_mode == "Light":
-            forgro_color = "gray"
-        # Light mode styling
-            # entry_katana_file = customtkinter.CTkEntry(master=Mainbar_frame, placeholder_text="Browse to the Directory of your .Katana file")
-            # entry_katana_file.grid(row=1, column=1, columnspan=2, padx=(20, 0), pady=(5, 5), sticky="nsew")  # Example positioning
-            # entry_frame_range = customtkinter.CTkEntry(master=Mainbar_frame, placeholder_text="1-3,5-10")
-            # entry_frame_range.grid(row=2, column=1, columnspan=2, padx=(20, 0), pady=(5, 5), sticky="nsew")
-            # entry_render_node = customtkinter.CTkEntry(master=Mainbar_frame, placeholder_text="Enter the node to render from")
-            # entry_render_node.grid(row=3, column=1, columnspan=2, padx=(20, 0), pady=(5, 10), sticky="nsew")
-            # entry_load_bat = customtkinter.CTkEntry(master=Mainbar_frame,placeholder_text="Select Batch launcher")
-            # entry_load_bat.grid(row=0, column=1, columnspan=2, padx=(20, 0), pady=(50, 5), sticky="nsew")
-            # tabview = customtkinter.CTkTabview(master=Mainbar_frame, height=100, width=100)
-            # tabview.grid(row=5, column=0, columnspan=4,  pady=5,padx=(20,20), sticky="nsew")
+            forgro_color="white"
+            entry_katana_file.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_frame_range.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_render_node.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_load_bat.configure(fg_color=forgro_color,border_color=forgro_color)
+            tabview.configure(fg_color=forgro_color,border_color=forgro_color, segmented_button_fg_color="gray", segmented_button_unselected_color="gray", segmented_button_unselected_hover_color="gray")
+            gsv_frame.configure(fg_color=forgro_color)
+            flags.configure(fg_color=forgro_color,border_color=forgro_color)
+            for gsv_name_entry, gsv_value_entry, _ in gsv_entries:
+                gsv_name_entry.configure(fg_color="gray",border_color="gray")
+                gsv_value_entry.configure(fg_color="gray",border_color="gray")
+            
             
 
     elif new_appearance_mode == "Dark" :
         # Dark mode styling
             forgro_color="#1d1e1e"
-            # entry_katana_file.grid(row=1, column=1, columnspan=2, padx=(20, 0), pady=(5, 5), sticky="nsew")  # Example positioning
-            # entry_frame_range = customtkinter.CTkEntry(master=Mainbar_frame,fg_color="#1d1e1e",border_color="#1d1e1e", placeholder_text="1-3,5-10")
-            # entry_frame_range.grid(row=2, column=1, columnspan=2, padx=(20, 0), pady=(5, 5), sticky="nsew")
-            # entry_render_node = customtkinter.CTkEntry(master=Mainbar_frame,fg_color="#1d1e1e",border_color="#1d1e1e", placeholder_text="Enter the node to render from")
-            # entry_render_node.grid(row=3, column=1, columnspan=2, padx=(20, 0), pady=(5, 10), sticky="nsew")
-            # entry_load_bat = customtkinter.CTkEntry(master=Mainbar_frame, fg_color="#1d1e1e",border_color="#1d1e1e", placeholder_text="Select Batch launcher")
-            # entry_load_bat.grid(row=0, column=1, columnspan=2, padx=(20, 0), pady=(50, 5), sticky="nsew")
-            # tabview = customtkinter.CTkTabview(master=Mainbar_frame, segmented_button_fg_color="#1d1e1e", segmented_button_unselected_color="#1d1e1e", segmented_button_unselected_hover_color="#292a2a",fg_color="#212121", height=100, width=100)
-            # tabview.grid(row=5, column=0, columnspan=4,  pady=5,padx=(20,20), sticky="nsew")
+            entry_katana_file.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_frame_range.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_render_node.configure(fg_color=forgro_color,border_color=forgro_color)
+            entry_load_bat.configure(fg_color=forgro_color,border_color=forgro_color)
+            tabview.configure(fg_color="#212121",border_color=forgro_color, segmented_button_fg_color=forgro_color, segmented_button_unselected_color=forgro_color, segmented_button_unselected_hover_color="#292a2a")
+            gsv_frame.configure(fg_color="#212121")
+            flags.configure(fg_color=forgro_color,border_color=forgro_color)
+            for gsv_name_entry, gsv_value_entry, _ in gsv_entries:
+                gsv_name_entry.configure(fg_color=forgro_color,border_color=forgro_color)
+                gsv_value_entry.configure(fg_color=forgro_color,border_color=forgro_color)
+            
+    else:  # Assume "System" defaults to dark for this example
+        forgro_color= None
+        entry_katana_file.configure(fg_color=entry_katana_file.cget("fg_color"))
+        return
+    
+        
             
 
 def browse_bat_file():
@@ -890,10 +898,10 @@ footer_frame.grid_columnconfigure(2, weight=2)
 
 appearance_mode_label = customtkinter.CTkLabel(master=sidebar_frame, text="Appearance Mode:", anchor="w")
 appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
-appearance_mode_optionemenu = customtkinter.CTkOptionMenu(master=sidebar_frame, values=["Dark"],
-                                                                       command=change_appearance_mode_event)
+appearance_mode_optionemenu = customtkinter.CTkOptionMenu(master=sidebar_frame, values=["Light","Dark"],
+                                                                        command=change_appearance_mode_event)
 # appearance_mode_optionemenu = customtkinter.CTkOptionMenu(master=sidebar_frame, values=["Light", "Dark","System"],
-#                                                                        command=change_appearance_mode_event)
+#                                                                         command=change_appearance_mode_event)
 appearance_mode_optionemenu.grid(row=6, column=0, padx=20, pady=(10, 10))
 # Set the default value (for example, "Light")
 appearance_mode_optionemenu.set("Dark")
