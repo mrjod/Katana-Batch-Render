@@ -30,6 +30,7 @@ manually_stopped = False
 
 
 forgro_color="#1d1e1e"
+gray_color= "gray"
 # Use CustomTkinter theme
 customtkinter.set_ctk_parent_class(tkinterDnD.Tk)
 # customtkinter.set_appearance_mode(change_appearance_mode_event)  # Modes: system (default), light, dark
@@ -767,9 +768,10 @@ def change_appearance_mode_event(new_appearance_mode: str):
             tabview.configure(fg_color=forgro_color,border_color=forgro_color, segmented_button_fg_color="gray", segmented_button_unselected_color="gray", segmented_button_unselected_hover_color="gray")
             gsv_frame.configure(fg_color=forgro_color)
             flags.configure(fg_color=forgro_color,border_color=forgro_color)
+            forgro_color="gray"
             for gsv_name_entry, gsv_value_entry, _ in gsv_entries:
-                gsv_name_entry.configure(fg_color="gray",border_color="gray")
-                gsv_value_entry.configure(fg_color="gray",border_color="gray")
+                gsv_name_entry.configure(fg_color=forgro_color,border_color=forgro_color)
+                gsv_value_entry.configure(fg_color=forgro_color,border_color=forgro_color)
             
             
 
