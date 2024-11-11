@@ -275,7 +275,7 @@ def handle_stdout(line):
     check_frame_status(line)
     global error_detected  # We will track if an error occurred
     # You can add logic here to search for specific error keywords in the stdout output
-    if "error" in line.lower():  # Check for errors in the output (adjust as needed)
+    if "error" in line.lower() and "the specified module could not be found" not in line.lower():  # Check for errors in the output (adjust as needed)
         error_detected = True
     else:
         # Call a function to update progress bar if no error
@@ -288,8 +288,10 @@ def handle_stderr(line):
     output_text.yview(tk.END)
     global error_detected  # We will track if an error occurred
     # You can add logic here to handle errors from stderr as well
-    if "error" in line.lower():  # Check for errors in the stderr output (adjust as needed)
+    if "error" in line.lower() and "the specified module could not be found" not in line.lower():  # Check for errors in the stderr output (adjust as needed)
         error_detected = True
+    else:
+        return
                 
 def check_frame_status(output_line):
     # Check if a frame started rendering
@@ -302,7 +304,7 @@ def check_frame_status(output_line):
     # For reuse rendering, check if "Frame: X" pattern is in the output
     if switch.get() == 1:
         # Look for the actual frame rendering line "Frame: X" (where X is the frame number)
-        frame_match = re.search(r"Frame: (\d+)", output_line)
+        frame_match = re.search(r"Frame: (\d+)", output_line) or re.search(r"Rendering frame (\d+)", output_line)
         
         if frame_match:
             # Set the flag to True once we detect actual rendering frames
@@ -398,7 +400,23 @@ def update_progress(output_line, progressbar):
             # print(f"Updated progress to {progress}")
         except ValueError:
             pass  # Handle the case where the conversion to int fail
-        
+    # elif "Block" in output_line and "rendered by GPU" in output_line:
+    elif "Block" in output_line:
+        # try:
+            
+            # Extract the percentage value
+            block_info = output_line.split("Block ")[1].split(" ")[0]
+            current_block, total_blocks = map(int, block_info.split('/'))
+            # Convert the percentage to a value between 0 and 1
+            percentage = (current_block / total_blocks) * 100
+            progress = percentage / 100.0
+            # Update the progress bar
+            progressbar.configure(mode="determinate")
+            progressbar.stop()
+            progressbar.set(progress)
+            # print(f"Updated progress to {progress}")
+        # except ValueError:
+        #     pass  # Handle the case where the conversion to int fail
     # After completing a frame or when rendering starts, set progress to indeterminate
     else:
         # If rendering is still in progress (e.g., processing next frame)
@@ -424,7 +442,7 @@ def extract_progress_from_line(line):
     # For example, you might use regular expressions to find the progress value
     # Customize this based on the format of your render output
     
-    progress_match = re.search(r"Progress: (\d+)%", line)
+    progress_match = re.search(r"Progress: (\d+)%", line) 
     if progress_match:
         
         return int(progress_match.group(1)) / 100.0
