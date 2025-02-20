@@ -1,6 +1,9 @@
 # Katana-Batch-Render
 This runs Foundry Katana Batch render using GUI instead of Command line 
 
+Video Tutorial
+https://youtu.be/lqP_Cn0ezK4
+
 ![Screenshot 2025-02-20 143314](https://github.com/user-attachments/assets/8ba6d9c5-aaca-4257-892a-379df77b16ca)
 
 
